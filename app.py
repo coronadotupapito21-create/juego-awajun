@@ -3,6 +3,7 @@ import streamlit as st
 import unicodedata
 import random
 from dataclasses import dataclass
+import requests
 
 # ------------------------------
 #   CONFIG & ESTILO AMAZONÍA
@@ -15,42 +16,27 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-:root{
-  --jungle:#0d5c49;
-  --leaf:#1f8a70;
-  --lime:#7ed957;
-  --cream:#f6fff5;
-}
+:root{ --jungle:#0d5c49; --leaf:#1f8a70; --lime:#7ed957; --cream:#f6fff5; }
 html, body, [data-testid="stAppViewContainer"]{
   background: radial-gradient(1200px 600px at 10% -20%, #e8f7ee 0%, #f6fff5 35%, #ecfff7 60%, #f9fff7 100%),
               url('https://images.unsplash.com/photo-1529336953121-a1b466d8b3f7?q=80&w=1600&auto=format&fit=crop') center/cover fixed no-repeat;
 }
 [data-testid="stHeader"] {background-color: rgba(255,255,255,0.0);}
 .block-container{padding-top:1.5rem; max-width: 980px;}
-
 h1, h2, h3 { color: var(--jungle) !important; }
-.j-card{
-  background: rgba(255,255,255,0.85);
-  border: 1px solid rgba(13,92,73,.08);
-  border-radius: 18px; padding: 14px 18px;
-  box-shadow: 0 10px 28px rgba(13,92,73,.10);
-}
-.j-pill{
-  background: linear-gradient(90deg, var(--leaf), var(--jungle));
-  color: white; padding: 8px 14px; border-radius: 999px;
-  font-weight:600; display:inline-block; letter-spacing:.2px;
-}
-.j-btn > button{
-  border-radius: 999px !important; padding:.55rem 1rem !important; font-weight:600;
-  border: 1px solid rgba(13,92,73,.15) !important;
-}
+.j-card{ background: rgba(255,255,255,0.85); border: 1px solid rgba(13,92,73,.08);
+  border-radius: 18px; padding: 14px 18px; box-shadow: 0 10px 28px rgba(13,92,73,.10); }
+.j-pill{ background: linear-gradient(90deg, var(--leaf), var(--jungle)); color: white;
+  padding: 8px 14px; border-radius: 999px; font-weight:600; display:inline-block; letter-spacing:.2px; }
+.j-btn > button{ border-radius: 999px !important; padding:.55rem 1rem !important; font-weight:600;
+  border: 1px solid rgba(13,92,73,.15) !important; }
 hr{border-top: 1px dashed rgba(13,92,73,.22);}
 .small{opacity:.85; font-size:.9rem;}
 </style>
 """, unsafe_allow_html=True)
 
 # ------------------------------
-#   FUNCIONES AUXILIARES
+#   UTILIDADES
 # ------------------------------
 def strip_diacritics(s: str) -> str:
     nf = unicodedata.normalize("NFD", s)
@@ -60,35 +46,56 @@ def normalize(s: str, ignore_accents=True) -> str:
     s = s.strip().casefold()
     return strip_diacritics(s) if ignore_accents else s
 
-def img_url(q: str) -> str:
+def fetch_image_bytes(urls):
+    """Devuelve bytes de la primera URL que responda 200 (con User-Agent)."""
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; AwajunGame/1.0)"}
+    for u in urls:
+        try:
+            r = requests.get(u, headers=headers, timeout=8)
+            if r.status_code == 200 and r.headers.get("content-type","").startswith("image"):
+                return r.content
+        except Exception:
+            continue
+    return None
+
+def themed_urls(query: str, slot: int):
     """
-    Imagen estable desde LoremFlickr (funciona en Streamlit Cloud).
-    Temática: Amazonía, naturaleza, selva.
+    Construye lista de proveedores para un concepto (query).
+    slot = 0..3 para variar semillas.
     """
-    q = q.replace(" ", ",")
-    seed = abs(hash(q)) % 10000
-    return f"https://loremflickr.com/800/600/{q},jungle,amazon,forest?lock={seed}"
+    q = query.replace(" ", ",")
+    seed = abs(hash(f"{q}-{slot}")) % 100000
+    return [
+        # 1) Proveedor temático (selva/amazonas)
+        f"https://loremflickr.com/800/600/{q},jungle,amazon,forest?lock={seed}",
+        # 2) Fallback estable
+        f"https://picsum.photos/seed/{seed}/800/600",
+    ]
 
 @dataclass
 class Level:
     es: str
     aw: str
-    queries: list
+    queries: list  # 4 conceptos de imagen
 
-    def images(self):
-        return [img_url(q) for q in self.queries[:4]]
+    def images_bytes(self):
+        imgs = []
+        for i, q in enumerate(self.queries[:4]):
+            content = fetch_image_bytes(themed_urls(q, i))
+            imgs.append(content)
+        return imgs
 
 def q4(word_es: str):
-    """Genera 4 búsquedas relacionadas con la palabra en español."""
+    """4 conceptos relacionados; puedes editarlos libremente."""
     return [
         word_es,
         f"{word_es} amazonía",
         f"{word_es} naturaleza",
-        f"{word_es} selva"
+        f"{word_es} selva",
     ]
 
 # ------------------------------
-#   LISTA DE PALABRAS (80)
+#   VOCABULARIO (80)
 # ------------------------------
 RAW = [
     ("Agua","Nantak"), ("Sol","Etsa"), ("Luna","Nantu"), ("Estrella","Wáim"),
@@ -111,24 +118,24 @@ RAW = [
     ("Trabajo","Wájamum"), ("Cantar","Pátsuk"), ("Bailar","Nújain"), ("Dormir","Tákam"),
     ("Beber","Náajum"), ("Ver","Wájeem"), ("Escuchar","Tsáitum"), ("Hablar","Núkamun"),
 ]
-
 LEVELS = [Level(es=es, aw=aw, queries=q4(es)) for es, aw in RAW]
 
 # ------------------------------
 #   ESTADO
 # ------------------------------
-if "order" not in st.session_state:
-    st.session_state.order = list(range(len(LEVELS)))
-    random.shuffle(st.session_state.order)
-if "idx" not in st.session_state:
-    st.session_state.idx = 0
-if "score" not in st.session_state:
-    st.session_state.score = 0
-if "reveal" not in st.session_state:
-    st.session_state.reveal = False
+ss = st.session_state
+if "order" not in ss:
+    ss.order = list(range(len(LEVELS)))
+    random.shuffle(ss.order)
+if "idx" not in ss:
+    ss.idx = 0
+if "score" not in ss:
+    ss.score = 0
+if "reveal" not in ss:
+    ss.reveal = False
 
 # ------------------------------
-#   INTERFAZ DE USUARIO
+#   UI
 # ------------------------------
 st.markdown('<div class="j-pill">Awajún · 4 fotos 1 palabra</div>', unsafe_allow_html=True)
 st.title("🌿 Aprende Awajún jugando")
@@ -136,8 +143,8 @@ st.title("🌿 Aprende Awajún jugando")
 colL, colR = st.columns([2,1])
 with colL:
     st.markdown('<div class="j-card">', unsafe_allow_html=True)
-    st.write("**Puntaje:**", st.session_state.score)
-    st.write("**Nivel:**", st.session_state.idx + 1, "/", len(LEVELS))
+    st.write("**Puntaje:**", ss.score)
+    st.write("**Nivel:**", ss.idx + 1, "/", len(LEVELS))
     st.markdown('</div>', unsafe_allow_html=True)
 with colR:
     opt = st.selectbox("Comparación", ["Flexible (ignora acentos)", "Estricta"], index=0)
@@ -145,15 +152,20 @@ with colR:
 
 st.markdown("---")
 
-k = st.session_state.order[st.session_state.idx]
+k = ss.order[ss.idx]
 lvl = LEVELS[k]
-imgs = lvl.images()
+img_bytes = lvl.images_bytes()
 
 c1, c2 = st.columns(2)
-c1.image(imgs[0], use_container_width=True)
-c2.image(imgs[1], use_container_width=True)
-c1.image(imgs[2], use_container_width=True)
-c2.image(imgs[3], use_container_width=True)
+# si algún proveedor falla, mostramos placeholder amigable
+def show(col, content):
+    if content:
+        col.image(content, use_container_width=True)
+    else:
+        col.info("🖼️ No se pudo cargar la imagen, intenta siguiente/pista.")
+
+show(c1, img_bytes[0]); show(c2, img_bytes[1])
+show(c1, img_bytes[2]); show(c2, img_bytes[3])
 
 st.markdown("### ✍️ Escribe la palabra en **awajún**:")
 ans = st.text_input(" ", placeholder="Tu respuesta aquí…", label_visibility="collapsed")
@@ -166,31 +178,33 @@ nextB = b4.button("Siguiente ▶️", use_container_width=True)
 
 target = lvl.aw
 if hint:
-    st.session_state.reveal = True
+    ss.reveal = True
 
 if check:
     if normalize(ans, ignore_accents) == normalize(target, ignore_accents) and ans.strip():
         st.success("✅ ¡Correcto!")
-        st.session_state.score += 10
-        st.session_state.idx = (st.session_state.idx + 1) % len(LEVELS)
-        st.session_state.reveal = False
+        ss.score += 10
+        ss.idx = (ss.idx + 1) % len(LEVELS)
+        ss.reveal = False
         st.experimental_rerun()
     else:
         st.error("❌ Incorrecto, ¡inténtalo otra vez!")
 
 if skip or nextB:
-    st.session_state.idx = (st.session_state.idx + 1) % len(LEVELS)
-    st.session_state.reveal = False
+    ss.idx = (ss.idx + 1) % len(LEVELS)
+    ss.reveal = False
     st.experimental_rerun()
 
-if st.session_state.reveal:
+if ss.reveal:
     st.info(f"💡 **Pista**: Español → **{lvl.es}**")
 
 with st.expander("📚 Ver respuesta (solo si te atascas)"):
     st.write(f"**{lvl.es}** → **{lvl.aw}** (Awajún)")
 
 st.markdown("---")
-st.caption("Hecho con ❤️ para aprender Awajún. Imágenes: LoremFlickr (búsqueda temática amazónica).")
+st.caption("Hecho con ❤️ para aprender Awajún. Imágenes: LoremFlickr / Picsum (fallback) con temática amazónica.")
+
+
 
 
 
