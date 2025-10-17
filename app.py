@@ -39,40 +39,77 @@ def normalize(s: str, ignore_accents=True) -> str:
     s = s.strip().casefold()
     return strip_diacritics(s) if ignore_accents else s
 
-def slugify_es(word_es: str) -> str:
-    """Convierte 'Árbol grande' -> 'arbol-grande' (para nombre de carpeta)."""
+def base_slug(word_es: str) -> str:
+    """Minúsculas y sin tildes/ñ→n; deja solo letras y números."""
     s = strip_diacritics(word_es).lower()
-    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    s = s.replace("ñ", "n")
+    s = re.sub(r"[^a-z0-9\s_-]+", "", s)  # limpia símbolos raros
+    s = re.sub(r"\s+", " ", s).strip()
     return s
+
+def folder_variants(word_es: str):
+    """
+    Devuelve variantes de carpeta aceptadas, todas minúsculas y sin tildes:
+      - con guiones:      'arbol-grande'
+      - sin separador:    'arbolgrande'
+      - con guion_bajo:   'arbol_grande'
+      - solo primera palabra (por si usas 'arbol'): 'arbol'
+    """
+    b = base_slug(word_es)              # e.g., 'arbol grande'
+    with_dash = b.replace(" ", "-")     # 'arbol-grande'
+    with_underscore = b.replace(" ", "_")  # 'arbol_grande'
+    no_sep = b.replace(" ", "")         # 'arbolgrande'
+    first = b.split(" ")[0]             # 'arbol'
+    # Quita dobles separadores, por si acaso
+    with_dash = re.sub(r"-+", "-", with_dash).strip("-")
+    with_underscore = re.sub(r"_+", "_", with_underscore).strip("_")
+    no_sep = re.sub(r"[^a-z0-9]", "", no_sep)
+
+    seen = set()
+    variants = []
+    for v in [with_dash, no_sep, with_underscore, first]:
+        if v and v not in seen:
+            variants.append(v)
+            seen.add(v)
+    return variants
 
 def local_image_paths_for(word_es: str):
     """
-    Busca imágenes locales en images/<slug>/
-    Prioriza 1.*, 2.*, 3.*, 4.*; si no, toma cualquier imagen.
-    Devuelve hasta 4 rutas; si hay <4, repite para completar 4.
+    Busca imágenes en cualquiera de las variantes de carpeta:
+      images/<var>/1..4.jpg|.png|.jpeg|.webp
+    Prioriza 1.*,2.*,3.*,4.*; si no hay, toma cualquier imagen.
+    Completa hasta 4 repitiendo la última.
     """
-    slug = slugify_es(word_es)  # 'Agua' -> 'agua'
-    folder = os.path.join("images", slug)
-    if not os.path.isdir(folder):
-        return []
+    exts = ("*.jpg", "*.jpeg", "*.png", "*.webp")
+    for var in folder_variants(word_es):
+        folder = os.path.join("images", var)
+        if not os.path.isdir(folder):
+            continue
 
-    preferred = []
-    for i in [1, 2, 3, 4]:
-        preferred.extend(sorted(glob.glob(os.path.join(folder, f"{i}.*"))))
-    others = []
-    if not preferred:
-        for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
-            others.extend(sorted(glob.glob(os.path.join(folder, ext))))
+        preferred = []
+        for i in [1, 2, 3, 4]:
+            for ext in exts:
+                preferred.extend(sorted(glob.glob(os.path.join(folder, f"{i}{ext[1:]}"))))
+        others = []
+        if not preferred:
+            for ext in exts:
+                others.extend(sorted(glob.glob(os.path.join(folder, ext))))
 
-    files = preferred if preferred else others
-    files = files[:4]
-    if not files:
-        return []
+        files = preferred if preferred else others
+        files = files[:4]
+        if not files:
+            continue
 
-    while len(files) < 4:
-        files.append(files[-1])
-    return files[:4]
+        while len(files) < 4:
+            files.append(files[-1])
+        return files[:4]
 
+    return []  # no se encontró ninguna variante
+
+# =========================
+#   MODELO DE NIVEL
+# =========================
+from dataclasses import dataclass
 @dataclass
 class Level:
     es: str   # Español (para carpeta y pista)
@@ -82,7 +119,9 @@ class Level:
         return local_image_paths_for(self.es)
 
 # =========================
-#   VOCABULARIO (solo 6 con imágenes locales)
+#   VOCABULARIO (aquí pon las que quieras jugar)
+#   Por ahora dejamos las 6 que dijiste que ya subiste.
+#   Cuando agregues más carpetas, solo añádelas aquí.
 # =========================
 RAW = [
     ("Agua","Nantak"),
@@ -139,14 +178,18 @@ def show(col, path):
     if path and os.path.exists(path):
         col.image(path, use_container_width=True)
     else:
-        col.warning(f"🖼️ Falta imagen en `images/{slugify_es(lvl.es)}/` (usa 1..4.jpg).")
+        # Muestra todas las variantes aceptadas para que sepas cómo nombrar
+        variants = ", ".join(folder_variants(lvl.es))
+        col.warning(f"🖼️ Falta imagen en alguna de estas carpetas: {variants}. "
+                    f"Usa nombres 1..4.jpg (o .png/.jpeg/.webp) dentro de /images/<carpeta>/")
 
 if paths:
     show(c1, paths[0]); show(c2, paths[1] if len(paths)>1 else None)
     show(c1, paths[2] if len(paths)>2 else None); show(c2, paths[3] if len(paths)>3 else None)
 else:
-    st.error(f"No encontré imágenes en `images/{slugify_es(lvl.es)}/`. "
-             f"Sube 1-4 archivos .jpg/.png/.webp con nombres 1,2,3,4.")
+    variants = ", ".join(folder_variants(lvl.es))
+    st.error(f"No encontré imágenes. Crea una de estas carpetas dentro de /images/: {variants} "
+             f"y pon 1..4.jpg")
 
 # ===== Alternativas (3) =====
 all_aw = [aw for _, aw in RAW]
@@ -194,7 +237,7 @@ if ss.reveal:
     st.info(f"💡 **Pista**: Español → **{lvl.es}**")
 
 st.markdown("---")
-st.caption("Usa imágenes locales en /images/<palabra>/1..4.jpg (minúsculas, sin acentos). Ej: images/agua/1.jpg")
+st.caption("Pon tus imágenes en /images/<carpeta>/1..4.jpg. Acepta carpetas en minúsculas y sin tildes: con guiones, sin separador o con guion_bajo.")
 
 
 
