@@ -40,16 +40,16 @@ def normalize(s: str, ignore_accents=True) -> str:
     return strip_diacritics(s) if ignore_accents else s
 
 def slugify_es(word_es: str) -> str:
-    """Convierte 'Árbol grande' -> 'arbol-grande' (minúsculas y sin tildes)."""
+    """Convierte 'Árbol' -> 'arbol' (minúsculas y sin tildes)."""
     s = strip_diacritics(word_es).lower()
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
     return s
 
 def local_image_paths_for(word_es: str):
     """
-    Busca imágenes locales en images/<nombre>/.
-    Nombres esperados: 1.jpg, 2.jpg, 3.jpg, 4.jpg.
-    Si hay menos, repite las disponibles.
+    Busca imágenes locales en images/<nombre>/ con nombres 1,2,3,4 y
+    extensiones .jpg/.jpeg/.png/.webp.
+    Si hay menos de 4, repite para completar.
     """
     slug = slugify_es(word_es)
     folder = os.path.join("images", slug)
@@ -58,19 +58,22 @@ def local_image_paths_for(word_es: str):
 
     paths = []
     for i in [1, 2, 3, 4]:
+        found = None
         for ext in ("jpg", "jpeg", "png", "webp"):
-            candidate = os.path.join(folder, f"{i}.{ext}")
-            if os.path.exists(candidate):
-                paths.append(candidate)
+            p = os.path.join(folder, f"{i}.{ext}")
+            if os.path.exists(p):
+                found = p
                 break
+        if found:
+            paths.append(found)
 
-    # Si no hay 1-4 numeradas, toma cualquier imagen
     if not paths:
         for ext in ("jpg", "jpeg", "png", "webp"):
-            paths.extend(glob.glob(os.path.join(folder, f"*.{ext}")))
+            paths.extend(sorted(glob.glob(os.path.join(folder, f"*.{ext}"))))
 
     if not paths:
         return []
+
     while len(paths) < 4:
         paths.append(paths[-1])
     return paths[:4]
@@ -101,14 +104,16 @@ ss = st.session_state
 if "order" not in ss:
     ss.order = list(range(len(LEVELS)))
     random.shuffle(ss.order)
-if "idx" not in ss:
+
+if "idx" not in ss:           # índice del nivel actual (en el orden barajado)
     ss.idx = 0
+
 if "score" not in ss:
     ss.score = 0
-if "reveal" not in ss:
-    ss.reveal = False
-if "choice" not in ss:
-    ss.choice = None
+
+# Opciones estables por nivel: dict[level_id] = [opt1,opt2,opt3,opt4]
+if "options_by_level" not in ss:
+    ss.options_by_level = {}
 
 # =========================
 #   INTERFAZ PRINCIPAL
@@ -131,38 +136,49 @@ st.markdown("---")
 # =========================
 #   NIVEL ACTUAL
 # =========================
-k = ss.order[ss.idx]
+k = ss.order[ss.idx]     # ID real del nivel
 lvl = LEVELS[k]
 paths = lvl.images()
 
 c1, c2 = st.columns(2)
+
 def show(col, path):
     if path and os.path.exists(path):
         col.image(path, use_container_width=True)
     else:
-        col.warning(f"🖼️ Falta imagen en `images/{slugify_es(lvl.es)}/1.jpg` ... `4.jpg`")
+        col.warning(f"🖼️ Falta imagen en `images/{slugify_es(lvl.es)}/1.jpg..4.jpg`")
 
 if paths:
     show(c1, paths[0]); show(c2, paths[1])
     show(c1, paths[2]); show(c2, paths[3])
 else:
-    st.error(f"No encontré imágenes en `images/{slugify_es(lvl.es)}/`. Sube 1–4 imágenes con nombres 1.jpg, 2.jpg, 3.jpg, 4.jpg.")
+    st.error(f"No encontré imágenes en `images/{slugify_es(lvl.es)}/`. "
+             f"Sube 1–4 imágenes 1.jpg, 2.jpg, 3.jpg, 4.jpg.")
 
 # =========================
-#   OPCIONES Y BOTONES
+#   OPCIONES ESTABLES (4)
 # =========================
-all_aw = [aw for _, aw in RAW]
-wrong = random.sample([aw for aw in all_aw if aw != lvl.aw], 2)
-options = [lvl.aw] + wrong
-random.shuffle(options)
+# Generar una sola vez por nivel
+if k not in ss.options_by_level:
+    # 1 correcta + 2 incorrectas (random) + 1 incorrecta extra (si quieres 4 exactas)
+    correct = lvl.aw
+    all_aw = [aw for _, aw in RAW if aw != correct]
+    wrong = random.sample(all_aw, 3)  # 3 incorrectas
+    opts = [correct] + wrong
+    random.shuffle(opts)
+    ss.options_by_level[k] = opts
+
+options = ss.options_by_level[k]
 
 st.markdown("### ✍️ Elige la palabra correcta (Awajún):")
-ss.choice = st.radio(
-    label="alternativas",
+# Clave única por nivel para que no cambie cuando se rerenderiza
+choice_key = f"choice_level_{k}"
+choice_value = st.radio(
+    "alternativas",
     options=options,
     index=None,
     label_visibility="collapsed",
-    key=f"choice_{ss.idx}",
+    key=choice_key,
 )
 
 b1, b2, b3, b4 = st.columns(4)
@@ -171,32 +187,33 @@ hint  = b2.button("Pista 💡", use_container_width=True)
 skip  = b3.button("Saltar ⏭️", use_container_width=True)
 nextB = b4.button("Siguiente ▶️", use_container_width=True)
 
+# =========================
+#   LÓGICA DE BOTONES
+# =========================
 if hint:
-    ss.reveal = True
+    st.info(f"💡 **Pista**: Español → **{lvl.es}**")
 
 if check:
-    if ss.choice is None:
+    if choice_value is None:
         st.warning("Selecciona una alternativa antes de comprobar.")
     else:
-        if normalize(ss.choice, ignore_accents) == normalize(lvl.aw, ignore_accents):
+        if normalize(choice_value, ignore_accents) == normalize(lvl.aw, ignore_accents):
             st.success("✅ ¡Correcto!")
             ss.score += 10
+            # Avanzar y limpiar selección para el próximo nivel
             ss.idx = (ss.idx + 1) % len(LEVELS)
-            ss.reveal = False
             st.rerun()
         else:
             st.error("❌ Incorrecto, ¡inténtalo otra vez!")
 
 if skip or nextB:
     ss.idx = (ss.idx + 1) % len(LEVELS)
-    ss.reveal = False
     st.rerun()
-
-if ss.reveal:
-    st.info(f"💡 **Pista**: Español → **{lvl.es}**")
 
 st.markdown("---")
 st.caption("Coloca tus imágenes en /images/<palabra>/1.jpg..4.jpg (solo minúsculas y sin tildes). Ejemplo: images/agua/1.jpg")
+
+
 
 
 
