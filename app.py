@@ -50,7 +50,7 @@ hr{border-top: 1px dashed rgba(13,92,73,.22);}
 """, unsafe_allow_html=True)
 
 # ------------------------------
-#   HELPERS
+#   FUNCIONES AUXILIARES
 # ------------------------------
 def strip_diacritics(s: str) -> str:
     nf = unicodedata.normalize("NFD", s)
@@ -61,21 +61,25 @@ def normalize(s: str, ignore_accents=True) -> str:
     return strip_diacritics(s) if ignore_accents else s
 
 def img_url(q: str) -> str:
-    """Imagen dinámica (Unsplash Source) por consulta simple."""
-    q = q.replace(" ", "+")
-    return f"https://source.unsplash.com/800x600/?{q}"
+    """
+    Imagen estable desde LoremFlickr (funciona en Streamlit Cloud).
+    Temática: Amazonía, naturaleza, selva.
+    """
+    q = q.replace(" ", ",")
+    seed = abs(hash(q)) % 10000
+    return f"https://loremflickr.com/800/600/{q},jungle,amazon,forest?lock={seed}"
 
 @dataclass
 class Level:
     es: str
     aw: str
-    queries: list  # 4 strings para imágenes
+    queries: list
 
     def images(self):
         return [img_url(q) for q in self.queries[:4]]
 
 def q4(word_es: str):
-    # 4 búsquedas por palabra con sabores amazónicos
+    """Genera 4 búsquedas relacionadas con la palabra en español."""
     return [
         word_es,
         f"{word_es} amazonía",
@@ -84,90 +88,28 @@ def q4(word_es: str):
     ]
 
 # ------------------------------
-#   DATA: Español → Awajún (80)
-#   (Si quieres cambiar imágenes, edita las queries con lo que desees)
+#   LISTA DE PALABRAS (80)
 # ------------------------------
 RAW = [
-    ("Agua","Nantak"),
-    ("Sol","Etsa"),
-    ("Luna","Nantu"),
-    ("Estrella","Wáim"),
-    ("Fuego","Néemi"),
-    ("Tierra","Iwanch"),
-    ("Cielo","Náem"),
-    ("Árbol","Númi"),
-    ("Flor","Páyam"),
-    ("Hoja","Tákem"),
-    ("Frío","Tsetsék"),
-    ("Calor","Sékem"),
-    ("Viento","Pákem"),
-    ("Lluvia","Tsúgki"),
-    ("Río","Nantakjai"),
-    ("Montaña","Wákan"),
-    ("Casa","Jíi"),
-    ("Cocina","Wájam"),
-    ("Comida","Núun"),
-    ("Yuca","Kúcha"),
-    ("Plátano","Pítsa"),
-    ("Maíz","Kúnki"),
-    ("Pescar","Nampet"),
-    ("Cazar","Wáju"),
-    ("Perro","Pétsi"),
-    ("Gato","Mítsa"),
-    ("Pájaro","Wíim"),
-    ("Mono","Túukam"),
-    ("Pez","Námpet"),
-    ("Serpiente","Wámpis"),
-    ("Hormiga","Túutam"),
-    ("Mariposa","Páach"),
-    ("Árbol grande","Númijáa"),
-    ("Hacha","Wáncham"),
-    ("Lanza","Tsámak"),
-    ("Flecha","Píjam"),
-    ("Cerbatana","Túuntam"),
-    ("Cuerda","Wátsa"),
-    ("Ropa","Tújam"),
-    ("Sombrero","Wáipam"),
-    ("Niño","Túujin"),
-    ("Niña","Túunam"),
-    ("Hombre","Aéntsa"),
-    ("Mujer","Núwa"),
-    ("Hermano","Wáajin"),
-    ("Hermana","Wáajum"),
-    ("Abuelo","Apachum"),
-    ("Abuela","Apatum"),
-    ("Madre","Núwam"),
-    ("Padre","Aéntsam"),
-    ("Fuerte","Kákajam"),
-    ("Débil","Nútsam"),
-    ("Grande","Wájam"),
-    ("Pequeño","Tíjam"),
-    ("Alto","Nátkam"),
-    ("Bajo","Wáatsam"),
-    ("Gordo","Wátsum"),
-    ("Delgado","Nátsum"),
-    ("Blanco","Tsáam"),
-    ("Negro","Wáampam"),
-    ("Verde","Núkam"),
-    ("Rojo","Wáinam"),
-    ("Amarillo","Túmpam"),
-    ("Azul","Pátkam"),
-    ("Fruta","Píkam"),
-    ("Flor","Páyam"),     # (repetido en tu lista; lo dejamos como nivel adicional)
-    ("Hoja","Tákem"),     # (repetido)
-    ("Fuego","Néemi"),    # (repetido)
-    ("Arena","Tsáamaj"),
-    ("Roca","Pátam"),
-    ("Camino","Náim"),
-    ("Trabajo","Wájamum"),
-    ("Cantar","Pátsuk"),
-    ("Bailar","Nújain"),
-    ("Dormir","Tákam"),
-    ("Comer","Núun"),     # (repetido)
-    ("Beber","Náajum"),
-    ("Ver","Wájeem"),
-    ("Escuchar","Tsáitum"),
-    ("Hablar","Núkamun"),
+    ("Agua","Nantak"), ("Sol","Etsa"), ("Luna","Nantu"), ("Estrella","Wáim"),
+    ("Fuego","Néemi"), ("Tierra","Iwanch"), ("Cielo","Náem"), ("Árbol","Númi"),
+    ("Flor","Páyam"), ("Hoja","Tákem"), ("Frío","Tsetsék"), ("Calor","Sékem"),
+    ("Viento","Pákem"), ("Lluvia","Tsúgki"), ("Río","Nantakjai"), ("Montaña","Wákan"),
+    ("Casa","Jíi"), ("Cocina","Wájam"), ("Comida","Núun"), ("Yuca","Kúcha"),
+    ("Plátano","Pítsa"), ("Maíz","Kúnki"), ("Pescar","Nampet"), ("Cazar","Wáju"),
+    ("Perro","Pétsi"), ("Gato","Mítsa"), ("Pájaro","Wíim"), ("Mono","Túukam"),
+    ("Pez","Námpet"), ("Serpiente","Wámpis"), ("Hormiga","Túutam"), ("Mariposa","Páach"),
+    ("Árbol grande","Númijáa"), ("Hacha","Wáncham"), ("Lanza","Tsámak"), ("Flecha","Píjam"),
+    ("Cerbatana","Túuntam"), ("Cuerda","Wátsa"), ("Ropa","Tújam"), ("Sombrero","Wáipam"),
+    ("Niño","Túujin"), ("Niña","Túunam"), ("Hombre","Aéntsa"), ("Mujer","Núwa"),
+    ("Hermano","Wáajin"), ("Hermana","Wáajum"), ("Abuelo","Apachum"), ("Abuela","Apatum"),
+    ("Madre","Núwam"), ("Padre","Aéntsam"), ("Fuerte","Kákajam"), ("Débil","Nútsam"),
+    ("Grande","Wájam"), ("Pequeño","Tíjam"), ("Alto","Nátkam"), ("Bajo","Wáatsam"),
+    ("Gordo","Wátsum"), ("Delgado","Nátsum"), ("Blanco","Tsáam"), ("Negro","Wáampam"),
+    ("Verde","Núkam"), ("Rojo","Wáinam"), ("Amarillo","Túmpam"), ("Azul","Pátkam"),
+    ("Fruta","Píkam"), ("Arena","Tsáamaj"), ("Roca","Pátam"), ("Camino","Náim"),
+    ("Trabajo","Wájamum"), ("Cantar","Pátsuk"), ("Bailar","Nújain"), ("Dormir","Tákam"),
+    ("Beber","Náajum"), ("Ver","Wájeem"), ("Escuchar","Tsáitum"), ("Hablar","Núkamun"),
 ]
 
 LEVELS = [Level(es=es, aw=aw, queries=q4(es)) for es, aw in RAW]
@@ -178,36 +120,31 @@ LEVELS = [Level(es=es, aw=aw, queries=q4(es)) for es, aw in RAW]
 if "order" not in st.session_state:
     st.session_state.order = list(range(len(LEVELS)))
     random.shuffle(st.session_state.order)
-
 if "idx" not in st.session_state:
     st.session_state.idx = 0
-
 if "score" not in st.session_state:
     st.session_state.score = 0
-
 if "reveal" not in st.session_state:
     st.session_state.reveal = False
 
 # ------------------------------
-#   UI
+#   INTERFAZ DE USUARIO
 # ------------------------------
 st.markdown('<div class="j-pill">Awajún · 4 fotos 1 palabra</div>', unsafe_allow_html=True)
 st.title("🌿 Aprende Awajún jugando")
 
-with st.container():
-    colL, colR = st.columns([2,1])
-    with colL:
-        st.markdown('<div class="j-card">', unsafe_allow_html=True)
-        st.write("**Puntaje:**", st.session_state.score)
-        st.write("**Nivel:**", st.session_state.idx + 1, "/", len(LEVELS))
-        st.markdown('</div>', unsafe_allow_html=True)
-    with colR:
-        opt = st.selectbox("Comparación", ["Flexible (ignora acentos)", "Estricta"], index=0)
-        ignore_accents = (opt == "Flexible (ignora acentos)")
+colL, colR = st.columns([2,1])
+with colL:
+    st.markdown('<div class="j-card">', unsafe_allow_html=True)
+    st.write("**Puntaje:**", st.session_state.score)
+    st.write("**Nivel:**", st.session_state.idx + 1, "/", len(LEVELS))
+    st.markdown('</div>', unsafe_allow_html=True)
+with colR:
+    opt = st.selectbox("Comparación", ["Flexible (ignora acentos)", "Estricta"], index=0)
+    ignore_accents = (opt == "Flexible (ignora acentos)")
 
 st.markdown("---")
 
-# Nivel actual
 k = st.session_state.order[st.session_state.idx]
 lvl = LEVELS[k]
 imgs = lvl.images()
@@ -253,7 +190,9 @@ with st.expander("📚 Ver respuesta (solo si te atascas)"):
     st.write(f"**{lvl.es}** → **{lvl.aw}** (Awajún)")
 
 st.markdown("---")
-st.caption("Hecho con ❤️ para aprender Awajún. Imágenes: Unsplash (búsqueda automática).")
+st.caption("Hecho con ❤️ para aprender Awajún. Imágenes: LoremFlickr (búsqueda temática amazónica).")
+
+
 
 
 
