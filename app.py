@@ -5,15 +5,10 @@ import random
 from dataclasses import dataclass
 import requests
 
-# ------------------------------
+# --------------------------------
 #   CONFIG & ESTILO AMAZONÍA
-# ------------------------------
-st.set_page_config(
-    page_title="Awajún: 4 fotos 1 palabra",
-    page_icon="🌿",
-    layout="centered"
-)
-
+# --------------------------------
+st.set_page_config(page_title="Awajún: 4 fotos 1 palabra", page_icon="🌿", layout="centered")
 st.markdown("""
 <style>
 :root{ --jungle:#0d5c49; --leaf:#1f8a70; --lime:#7ed957; --cream:#f6fff5; }
@@ -35,9 +30,9 @@ hr{border-top: 1px dashed rgba(13,92,73,.22);}
 </style>
 """, unsafe_allow_html=True)
 
-# ------------------------------
+# --------------------------------
 #   UTILIDADES
-# ------------------------------
+# --------------------------------
 def strip_diacritics(s: str) -> str:
     nf = unicodedata.normalize("NFD", s)
     return "".join(ch for ch in nf if unicodedata.category(ch) != "Mn")
@@ -60,23 +55,21 @@ def fetch_image_bytes(urls):
 
 def themed_urls(query: str, slot: int):
     """
-    Construye lista de proveedores para un concepto (query).
-    slot = 0..3 para variar semillas.
+    Construye proveedores para un concepto. slot = 0..3 para variar semillas.
+    1) loremflickr (temático: selva/amazonas)  2) picsum (fallback estable)
     """
     q = query.replace(" ", ",")
     seed = abs(hash(f"{q}-{slot}")) % 100000
     return [
-        # 1) Proveedor temático (selva/amazonas)
         f"https://loremflickr.com/800/600/{q},jungle,amazon,forest?lock={seed}",
-        # 2) Fallback estable
         f"https://picsum.photos/seed/{seed}/800/600",
     ]
 
 @dataclass
 class Level:
-    es: str
-    aw: str
-    queries: list  # 4 conceptos de imagen
+    es: str       # Español
+    aw: str       # Awajún
+    queries: list # 4 conceptos de imagen
 
     def images_bytes(self):
         imgs = []
@@ -85,18 +78,9 @@ class Level:
             imgs.append(content)
         return imgs
 
-def q4(word_es: str):
-    """4 conceptos relacionados; puedes editarlos libremente."""
-    return [
-        word_es,
-        f"{word_es} amazonía",
-        f"{word_es} naturaleza",
-        f"{word_es} selva",
-    ]
-
-# ------------------------------
-#   VOCABULARIO (80)
-# ------------------------------
+# --------------------------------
+#   VOCABULARIO (Español → Awajún)
+# --------------------------------
 RAW = [
     ("Agua","Nantak"), ("Sol","Etsa"), ("Luna","Nantu"), ("Estrella","Wáim"),
     ("Fuego","Néemi"), ("Tierra","Iwanch"), ("Cielo","Náem"), ("Árbol","Númi"),
@@ -118,11 +102,100 @@ RAW = [
     ("Trabajo","Wájamum"), ("Cantar","Pátsuk"), ("Bailar","Nújain"), ("Dormir","Tákam"),
     ("Beber","Náajum"), ("Ver","Wájeem"), ("Escuchar","Tsáitum"), ("Hablar","Núkamun"),
 ]
-LEVELS = [Level(es=es, aw=aw, queries=q4(es)) for es, aw in RAW]
 
-# ------------------------------
+# --------------------------------
+#   QUERIES por palabra (para que concuerden las imágenes)
+# --------------------------------
+Q = {
+    "Agua": ["river water", "waterfall", "stream", "rain"],
+    "Sol": ["sun sunrise", "bright sun", "sun rays", "sunset"],
+    "Luna": ["moon night", "full moon", "crescent moon", "night sky"],
+    "Estrella": ["starry sky", "milky way stars", "constellation", "night stars"],
+    "Fuego": ["campfire", "fire flame", "bonfire night", "firewood flame"],
+    "Tierra": ["soil ground", "farmland earth", "soil hands", "earth texture"],
+    "Cielo": ["blue sky clouds", "cloudy sky", "sky horizon", "sky daylight"],
+    "Árbol": ["single tree", "tropical tree", "tree in forest", "tree closeup"],
+    "Flor": ["flower closeup", "wildflower", "jungle flower", "flower macro"],
+    "Hoja": ["leaf macro", "green leaf", "jungle leaf", "leaf veins"],
+    "Frío": ["cold frost", "snow cold", "winter cold", "icy landscape"],
+    "Calor": ["hot sun heat", "desert heat", "heat haze", "sunny hot"],
+    "Viento": ["wind blowing trees", "windy field", "flags in wind", "storm wind"],
+    "Lluvia": ["rain drops", "rain street", "rainforest rain", "umbrella rain"],
+    "Río": ["amazon river", "river curve", "river in forest", "river boats"],
+    "Montaña": ["mountain range", "mountain peak", "andes mountains", "rocky mountain"],
+    "Casa": ["jungle house", "wooden house", "hut", "rural house"],
+    "Cocina": ["kitchen cooking", "traditional kitchen", "pots stove", "cooking fire"],
+    "Comida": ["traditional food", "meal dish", "food plate", "banquet"],
+    "Yuca": ["cassava root", "cassava harvest", "cassava food", "yuca dish"],
+    "Plátano": ["plantain banana bunch", "banana plant", "banana fruit", "banana harvest"],
+    "Maíz": ["corn field", "corn cobs", "corn kernels", "maize harvest"],
+    "Pescar": ["fishing river", "fisherman boat", "fish catch", "net fishing"],
+    "Cazar": ["hunting bow", "hunter forest", "jungle hunting", "spear hunting"],
+    "Perro": ["dog portrait", "dog running", "puppy", "dog closeup"],
+    "Gato": ["cat portrait", "kitten", "cat eyes", "cat sitting"],
+    "Pájaro": ["bird flying", "tropical bird", "bird on branch", "colorful bird"],
+    "Mono": ["monkey jungle", "howler monkey", "capuchin monkey", "monkey family"],
+    "Pez": ["fish underwater", "tropical fish", "fish closeup", "river fish"],
+    "Serpiente": ["snake jungle", "boa snake", "snake closeup", "viper"],
+    "Hormiga": ["ant macro", "ants", "leafcutter ants", "ant trail"],
+    "Mariposa": ["butterfly macro", "butterfly wings", "colorful butterfly", "butterfly flower"],
+    "Árbol grande": ["giant tree", "ceiba tree", "huge tree trunk", "ancient tree"],
+    "Hacha": ["axe tool", "wood chopping", "axe log", "axe closeup"],
+    "Lanza": ["spear weapon", "tribal spear", "hunter spear", "wooden spear"],
+    "Flecha": ["arrow quiver", "arrow bow", "arrows", "archery arrow"],
+    "Cerbatana": ["blowgun", "tribal blowgun", "amazon blowgun", "hunter blowpipe"],
+    "Cuerda": ["rope coil", "rope knot", "twine", "hemp rope"],
+    "Ropa": ["clothes", "traditional clothes", "folded clothes", "wardrobe clothes"],
+    "Sombrero": ["hat", "straw hat", "traditional hat", "hat portrait"],
+    "Niño": ["boy child", "smiling boy", "kid playing", "school boy"],
+    "Niña": ["girl child", "smiling girl", "kid drawing", "school girl"],
+    "Hombre": ["man portrait", "adult man", "farmer man", "man outdoors"],
+    "Mujer": ["woman portrait", "adult woman", "woman smile", "woman outdoors"],
+    "Hermano": ["brothers", "siblings boys", "two brothers", "family brothers"],
+    "Hermana": ["sisters", "siblings girls", "two sisters", "family sisters"],
+    "Abuelo": ["grandfather", "elder man", "old man portrait", "grandpa"],
+    "Abuela": ["grandmother", "elder woman", "old woman portrait", "grandma"],
+    "Madre": ["mother child", "mom hugging child", "mother", "mom portrait"],
+    "Padre": ["father child", "dad with kid", "father", "dad portrait"],
+    "Fuerte": ["strong man flexing", "strength", "strong athlete", "heavy lifting"],
+    "Débil": ["weak tired", "exhausted person", "sick weak", "weak hands"],
+    "Grande": ["big elephant", "huge object", "giant size", "very big"],
+    "Pequeño": ["small tiny", "miniature", "little kid", "tiny object"],
+    "Alto": ["tall person", "tall tree", "tall building", "height"],
+    "Bajo": ["short person", "low height", "low table", "short kid"],
+    "Gordo": ["fat person", "overweight", "plump", "chubby"],
+    "Delgado": ["slim thin", "skinny person", "thin body", "slender"],
+    "Blanco": ["white color", "white wall", "white fabric", "white paint"],
+    "Negro": ["black color", "black fabric", "black wall", "black texture"],
+    "Verde": ["green color", "green nature", "green leaves", "green wall"],
+    "Rojo": ["red color", "red paint", "red fabric", "red light"],
+    "Amarillo": ["yellow color", "yellow wall", "yellow paint", "yellow fabric"],
+    "Azul": ["blue color", "blue wall", "blue paint", "blue sky"],
+    "Fruta": ["tropical fruits", "fruit basket", "fruit market", "fresh fruit"],
+    "Arena": ["sand beach", "sand desert", "sand texture", "sand closeup"],
+    "Roca": ["rock stone", "boulder rock", "rock cliff", "stone texture"],
+    "Camino": ["road path", "jungle path", "trail", "dirt road"],
+    "Trabajo": ["work job", "people working", "team work", "office work"],
+    "Cantar": ["singing", "mic singer", "choir", "sing performance"],
+    "Bailar": ["dance performance", "folk dance", "dancers", "party dance"],
+    "Dormir": ["sleeping person", "sleep bed", "nap", "sleep night"],
+    "Beber": ["drink water", "drinking cup", "drink bottle", "drink glass"],
+    "Ver": ["watching", "binoculars", "look observe", "see view"],
+    "Escuchar": ["listening headphones", "listen ear", "audio listening", "music listening"],
+    "Hablar": ["talk conversation", "speaking", "people talking", "speech"],
+}
+
+def queries_for(es: str):
+    # Si no definimos una entrada, usar algo genérico
+    if es in Q:
+        return Q[es][:4]
+    return [es, f"{es} amazonía", f"{es} naturaleza", f"{es} selva"]
+
+LEVELS = [Level(es=es, aw=aw, queries=queries_for(es)) for es, aw in RAW]
+
+# --------------------------------
 #   ESTADO
-# ------------------------------
+# --------------------------------
 ss = st.session_state
 if "order" not in ss:
     ss.order = list(range(len(LEVELS)))
@@ -133,10 +206,12 @@ if "score" not in ss:
     ss.score = 0
 if "reveal" not in ss:
     ss.reveal = False
+if "choice" not in ss:
+    ss.choice = None
 
-# ------------------------------
+# --------------------------------
 #   UI
-# ------------------------------
+# --------------------------------
 st.markdown('<div class="j-pill">Awajún · 4 fotos 1 palabra</div>', unsafe_allow_html=True)
 st.title("🌿 Aprende Awajún jugando")
 
@@ -152,23 +227,38 @@ with colR:
 
 st.markdown("---")
 
+# Nivel actual
 k = ss.order[ss.idx]
 lvl = LEVELS[k]
 img_bytes = lvl.images_bytes()
 
 c1, c2 = st.columns(2)
-# si algún proveedor falla, mostramos placeholder amigable
 def show(col, content):
     if content:
         col.image(content, use_container_width=True)
     else:
-        col.info("🖼️ No se pudo cargar la imagen, intenta siguiente/pista.")
+        col.info("🖼️ No se pudo cargar la imagen, intenta Siguiente.")
 
 show(c1, img_bytes[0]); show(c2, img_bytes[1])
 show(c1, img_bytes[2]); show(c2, img_bytes[3])
 
-st.markdown("### ✍️ Escribe la palabra en **awajún**:")
-ans = st.text_input(" ", placeholder="Tu respuesta aquí…", label_visibility="collapsed")
+# --------------------------------
+#   MÚLTIPLE OPCIÓN (3 alternativas)
+# --------------------------------
+# opciones = 1 correcta (Awajún del nivel) + 2 incorrectas al azar
+all_aw = [aw for _, aw in RAW]
+wrong = random.sample([aw for aw in all_aw if aw != lvl.aw], 2)
+options = [lvl.aw] + wrong
+random.shuffle(options)
+
+st.markdown("### ✍️ Elige la palabra correcta (Awajún):")
+ss.choice = st.radio(
+    label="alternativas",
+    options=options,
+    index=None,
+    label_visibility="collapsed",
+    key=f"choice_{ss.idx}",  # para que cambie con cada nivel
+)
 
 b1, b2, b3, b4 = st.columns(4)
 check = b1.button("Comprobar ✅", use_container_width=True)
@@ -176,33 +266,36 @@ hint  = b2.button("Pista 💡", use_container_width=True)
 skip  = b3.button("Saltar ⏭️", use_container_width=True)
 nextB = b4.button("Siguiente ▶️", use_container_width=True)
 
-target = lvl.aw
 if hint:
     ss.reveal = True
 
 if check:
-    if normalize(ans, ignore_accents) == normalize(target, ignore_accents) and ans.strip():
-        st.success("✅ ¡Correcto!")
-        ss.score += 10
-        ss.idx = (ss.idx + 1) % len(LEVELS)
-        ss.reveal = False
-        st.experimental_rerun()
+    if ss.choice is None:
+        st.warning("Selecciona una alternativa antes de comprobar.")
     else:
-        st.error("❌ Incorrecto, ¡inténtalo otra vez!")
+        if normalize(ss.choice, ignore_accents) == normalize(lvl.aw, ignore_accents):
+            st.success("✅ ¡Correcto!")
+            ss.score += 10
+            ss.idx = (ss.idx + 1) % len(LEVELS)
+            ss.reveal = False
+            st.rerun()   # ← ya no experimental
+        else:
+            st.error("❌ Incorrecto, ¡inténtalo otra vez!")
 
 if skip or nextB:
     ss.idx = (ss.idx + 1) % len(LEVELS)
     ss.reveal = False
-    st.experimental_rerun()
+    st.rerun()
 
 if ss.reveal:
     st.info(f"💡 **Pista**: Español → **{lvl.es}**")
 
-with st.expander("📚 Ver respuesta (solo si te atascas)"):
+with st.expander("📚 Ver respuesta"):
     st.write(f"**{lvl.es}** → **{lvl.aw}** (Awajún)")
-
 st.markdown("---")
 st.caption("Hecho con ❤️ para aprender Awajún. Imágenes: LoremFlickr / Picsum (fallback) con temática amazónica.")
+
+
 
 
 
