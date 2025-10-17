@@ -51,7 +51,7 @@ def local_image_paths_for(word_es: str):
     Prioriza 1.*, 2.*, 3.*, 4.*; si no, toma cualquier imagen.
     Devuelve hasta 4 rutas; si hay <4, repite para completar 4.
     """
-    slug = slugify_es(word_es)
+    slug = slugify_es(word_es)  # 'Agua' -> 'agua'
     folder = os.path.join("images", slug)
     if not os.path.isdir(folder):
         return []
@@ -69,7 +69,6 @@ def local_image_paths_for(word_es: str):
     if not files:
         return []
 
-    # Completar hasta 4
     while len(files) < 4:
         files.append(files[-1])
     return files[:4]
@@ -83,28 +82,15 @@ class Level:
         return local_image_paths_for(self.es)
 
 # =========================
-#   VOCABULARIO (80)
+#   VOCABULARIO (solo 6 con imágenes locales)
 # =========================
 RAW = [
-    ("Agua","Nantak"), ("Sol","Etsa"), ("Luna","Nantu"), ("Estrella","Wáim"),
-    ("Fuego","Néemi"), ("Tierra","Iwanch"), ("Cielo","Náem"), ("Árbol","Númi"),
-    ("Flor","Páyam"), ("Hoja","Tákem"), ("Frío","Tsetsék"), ("Calor","Sékem"),
-    ("Viento","Pákem"), ("Lluvia","Tsúgki"), ("Río","Nantakjai"), ("Montaña","Wákan"),
-    ("Casa","Jíi"), ("Cocina","Wájam"), ("Comida","Núun"), ("Yuca","Kúcha"),
-    ("Plátano","Pítsa"), ("Maíz","Kúnki"), ("Pescar","Nampet"), ("Cazar","Wáju"),
-    ("Perro","Pétsi"), ("Gato","Mítsa"), ("Pájaro","Wíim"), ("Mono","Túukam"),
-    ("Pez","Námpet"), ("Serpiente","Wámpis"), ("Hormiga","Túutam"), ("Mariposa","Páach"),
-    ("Árbol grande","Númijáa"), ("Hacha","Wáncham"), ("Lanza","Tsámak"), ("Flecha","Píjam"),
-    ("Cerbatana","Túuntam"), ("Cuerda","Wátsa"), ("Ropa","Tújam"), ("Sombrero","Wáipam"),
-    ("Niño","Túujin"), ("Niña","Túunam"), ("Hombre","Aéntsa"), ("Mujer","Núwa"),
-    ("Hermano","Wáajin"), ("Hermana","Wáajum"), ("Abuelo","Apachum"), ("Abuela","Apatum"),
-    ("Madre","Núwam"), ("Padre","Aéntsam"), ("Fuerte","Kákajam"), ("Débil","Nútsam"),
-    ("Grande","Wájam"), ("Pequeño","Tíjam"), ("Alto","Nátkam"), ("Bajo","Wáatsam"),
-    ("Gordo","Wátsum"), ("Delgado","Nátsum"), ("Blanco","Tsáam"), ("Negro","Wáampam"),
-    ("Verde","Núkam"), ("Rojo","Wáinam"), ("Amarillo","Túmpam"), ("Azul","Pátkam"),
-    ("Fruta","Píkam"), ("Arena","Tsáamaj"), ("Roca","Pátam"), ("Camino","Náim"),
-    ("Trabajo","Wájamum"), ("Cantar","Pátsuk"), ("Bailar","Nújain"), ("Dormir","Tákam"),
-    ("Beber","Náajum"), ("Ver","Wájeem"), ("Escuchar","Tsáitum"), ("Hablar","Núkamun"),
+    ("Agua","Nantak"),
+    ("Sol","Etsa"),
+    ("Luna","Nantu"),
+    ("Estrella","Wáim"),
+    ("Fuego","Néemi"),
+    ("Tierra","Iwanch"),
 ]
 LEVELS = [Level(es=es, aw=aw) for es, aw in RAW]
 
@@ -153,8 +139,7 @@ def show(col, path):
     if path and os.path.exists(path):
         col.image(path, use_container_width=True)
     else:
-        col.warning("🖼️ Falta imagen local. Sube a `images/{}/1..4.jpg`."
-                    .format(slugify_es(lvl.es)))
+        col.warning(f"🖼️ Falta imagen en `images/{slugify_es(lvl.es)}/` (usa 1..4.jpg).")
 
 if paths:
     show(c1, paths[0]); show(c2, paths[1] if len(paths)>1 else None)
@@ -209,7 +194,8 @@ if ss.reveal:
     st.info(f"💡 **Pista**: Español → **{lvl.es}**")
 
 st.markdown("---")
-st.caption("Coloca tus imágenes en /images/<palabra>/1..4.jpg (minúsculas, sin acentos). Ej: images/yuca/1.jpg")
+st.caption("Usa imágenes locales en /images/<palabra>/1..4.jpg (minúsculas, sin acentos). Ej: images/agua/1.jpg")
+
 
 
 
