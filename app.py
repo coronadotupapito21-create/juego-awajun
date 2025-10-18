@@ -2,9 +2,7 @@
 import streamlit as st
 import unicodedata
 import random
-import os, glob, re
-import matplotlib.pyplot as plt
-from dataclasses import dataclass
+import os, re
 
 # =========================
 #   CONFIGURACIÓN VISUAL
@@ -18,20 +16,28 @@ html, body, [data-testid="stAppViewContainer"]{
   background: radial-gradient(1200px 600px at 10% -20%, #e8f7ee 0%, #f6fff5 35%, #ecfff7 60%, #f9fff7 100%);
 }
 [data-testid="stHeader"] {background-color: rgba(255,255,255,0);}
-.block-container{padding-top:1.5rem; max-width: 980px;}
+.block-container{padding-top:1.2rem; max-width: 980px;}
 h1, h2, h3 { color: var(--jungle) !important; text-align:center; }
+
 .option-btn{
-  display:inline-block; background:#f2f2f2; color:#0d5c49;
-  border:2px solid #0d5c49; border-radius:12px; padding:10px 15px;
-  font-weight:600; text-align:center; margin:6px; width:40%;
+  display:inline-block; background:#f8faf9; color:#0d5c49;
+  border:2px solid #0d5c49; border-radius:12px; padding:12px 16px;
+  font-weight:700; text-align:center; margin:8px; width:100%;
+  transition:all .15s ease;
 }
 .option-btn:hover{ background:#dff4ec; border-color:#1f8a70; }
+
 .result-box{
-  padding:25px; border-radius:16px; text-align:center;
-  font-size:28px; font-weight:700; color:white; margin-top:15px;
+  padding:26px; border-radius:16px; text-align:center;
+  font-size:28px; font-weight:800; color:white; margin:18px 0 6px 0;
 }
 .correct{ background:#1f8a70; }
 .incorrect{ background:#c0392b; }
+
+.j-chip{
+  display:inline-block; padding:6px 12px; border-radius:999px;
+  background:linear-gradient(90deg,#1f8a70,#0d5c49); color:#fff; font-weight:700;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -46,13 +52,13 @@ def normalize(s: str) -> str:
     return strip_diacritics(s.strip().casefold())
 
 def slugify_es(word_es: str) -> str:
-    """Convierte 'Árbol' -> 'arbol' (solo minúsculas y sin tildes)."""
+    """Convierte 'Árbol grande' -> 'arbolgrande' (solo minúsculas y sin tildes) para el nombre de carpeta."""
     s = strip_diacritics(word_es).lower()
     s = re.sub(r"[^a-z0-9]+", "", s)
     return s
 
 def local_image_paths_for(word_es: str):
-    """Busca imágenes en /images/<palabra>/1.jpg..4.jpg"""
+    """Busca imágenes en /images/<palabra>/1.jpg..4.jpg (jpg/jpeg/png/webp)."""
     slug = slugify_es(word_es)
     folder = os.path.join("images", slug)
     paths = []
@@ -65,14 +71,8 @@ def local_image_paths_for(word_es: str):
     return paths
 
 # =========================
-#   DATOS DEL JUEGO
+#   DATOS DEL JUEGO (30 niveles)
 # =========================
-@dataclass
-class Level:
-    es: str
-    aw: str
-    def images(self): return local_image_paths_for(self.es)
-
 RAW = [
     ("Agua","Nantak"), ("Sol","Etsa"), ("Luna","Nantu"), ("Estrella","Wáim"),
     ("Fuego","Néemi"), ("Tierra","Iwanch"), ("Cielo","Náem"), ("Arbol","Númi"),
@@ -83,7 +83,6 @@ RAW = [
     ("Hormiga","Túutam"), ("Mariposa","Páach"), ("Nina","Túunam"), ("Comida","Núun"),
     ("Yuca","Kúcha"), ("Platano","Pítsa"),
 ]
-LEVELS = [Level(es=es, aw=aw) for es, aw in RAW]
 
 # =========================
 #   ESTADO DEL JUEGO
@@ -96,32 +95,38 @@ if "incorrects" not in ss: ss.incorrects = 0
 if "finished" not in ss: ss.finished = False
 if "options_by_level" not in ss: ss.options_by_level = {}
 
-# =========================
-#   JUEGO FINALIZADO
-# =========================
-if ss.finished:
-    st.header("🏁 ¡Juego finalizado!")
-    st.subheader(f"Respondiste correctamente {ss.corrects} de {len(LEVELS)} preguntas")
+TOTAL_LEVELS = len(RAW)  # 30
+POINTS_PER_HIT = 5
 
-    # Mensaje final según puntaje
-    ratio = ss.corrects / len(LEVELS)
+# =========================
+#   PANTALLA FINAL
+# =========================
+def show_final_screen():
+    st.header("🏁 ¡Juego finalizado!")
+    st.subheader(f"Respondiste correctamente **{ss.corrects} de {TOTAL_LEVELS}** preguntas")
+    st.write(f"**Puntaje total:** {ss.score} puntos")
+
+    ratio = ss.corrects / TOTAL_LEVELS
     if ratio == 1:
         st.success("🌟 ¡Felicidades! Eres un verdadero maestro del Awajún. ¡Perfecto!")
     elif ratio >= 0.8:
         st.success("💪 ¡Excelente! Conoces muy bien las palabras Awajún.")
     elif ratio >= 0.5:
-        st.warning("🙂 Buen intento, sigue practicando para mejorar.")
+        st.warning("🙂 Buen trabajo, sigue practicando para mejorar.")
     else:
-        st.error("🌱 No te preocupes, sigue aprendiendo. ¡La práctica hace al maestro!")
+        st.error("🌱 ¡Ánimo! Cada intento suma. Vuelve a jugar y mejorarás.")
 
-    # Gráfica de resultados
-    fig, ax = plt.subplots()
-    ax.bar(["Correctas", "Incorrectas"], [ss.corrects, ss.incorrects], color=["#1f8a70", "#c0392b"])
-    ax.set_title("Resultados del Juego", fontsize=16)
-    st.pyplot(fig)
+    st.markdown("#### 📊 Tus resultados")
+    # Gráfica nativa (sin matplotlib)
+    import pandas as pd
+    df = pd.DataFrame(
+        {"Cantidad": [ss.corrects, ss.incorrects]},
+        index=["Correctas", "Incorrectas"]
+    )
+    st.bar_chart(df)
 
-    st.markdown("---")
-    if st.button("🔄 Jugar de nuevo"):
+    st.divider()
+    if st.button("🔄 Jugar de nuevo", use_container_width=True):
         ss.idx = 0
         ss.score = 0
         ss.corrects = 0
@@ -129,63 +134,68 @@ if ss.finished:
         ss.finished = False
         ss.options_by_level = {}
         st.rerun()
+
+# =========================
+#   JUEGO
+# =========================
+st.markdown('<span class="j-chip">Awajún · 4 fotos 1 palabra</span>', unsafe_allow_html=True)
+st.title("🌿 Aprende Awajún jugando")
+
+if ss.finished:
+    show_final_screen()
     st.stop()
 
-# =========================
-#   NIVEL ACTUAL
-# =========================
-lvl = LEVELS[ss.idx]
-paths = lvl.images()
+# Nivel actual
+es, aw = RAW[ss.idx]
+paths = local_image_paths_for(es)
 
-st.title(f"Nivel {ss.idx+1} / {len(LEVELS)}")
-st.subheader(f"¿Cuál es la palabra en Awajún?")
+st.subheader(f"Nivel {ss.idx+1} / {TOTAL_LEVELS}")
+st.caption("¿Cuál es la palabra en Awajún?")
 
-col1, col2 = st.columns(2)
+c1, c2 = st.columns(2)
 if len(paths) >= 4:
-    col1.image(paths[0]); col2.image(paths[1])
-    col1.image(paths[2]); col2.image(paths[3])
+    c1.image(paths[0], use_container_width=True); c2.image(paths[1], use_container_width=True)
+    c1.image(paths[2], use_container_width=True); c2.image(paths[3], use_container_width=True)
 else:
-    st.warning(f"Faltan imágenes en: images/{slugify_es(lvl.es)}/")
+    st.warning(f"Faltan imágenes en: `images/{slugify_es(es)}/1.jpg..4.jpg`")
 
-# =========================
-#   OPCIONES (BOTONES)
-# =========================
+# Opciones estables por nivel
 if ss.idx not in ss.options_by_level:
-    correct = lvl.aw
-    pool = [aw for _, aw in RAW if aw != correct]
+    correct = aw
+    pool = [opp_aw for _, opp_aw in RAW if opp_aw != correct]
     wrong = random.sample(pool, 3)
-    opts = [correct] + wrong
-    random.shuffle(opts)
-    ss.options_by_level[ss.idx] = opts
+    options = [correct] + wrong
+    random.shuffle(options)
+    ss.options_by_level[ss.idx] = options
+else:
+    options = ss.options_by_level[ss.idx]
 
-options = ss.options_by_level[ss.idx]
+# Botones tipo “cuadritos”
 cols = st.columns(2)
 selected = None
-
 for i, opt in enumerate(options):
-    if cols[i % 2].button(opt, use_container_width=True):
+    if cols[i % 2].button(f"{opt}", use_container_width=True, key=f"opt_{ss.idx}_{i}"):
         selected = opt
 
-# =========================
-#   VALIDACIÓN DE RESPUESTA
-# =========================
+# Validación y avance
 if selected:
-    if normalize(selected) == normalize(lvl.aw):
-        ss.score += 5
+    if normalize(selected) == normalize(aw):
+        ss.score += POINTS_PER_HIT
         ss.corrects += 1
         st.markdown('<div class="result-box correct">✅ ¡CORRECTO!</div>', unsafe_allow_html=True)
     else:
         ss.incorrects += 1
         st.markdown('<div class="result-box incorrect">❌ INCORRECTO</div>', unsafe_allow_html=True)
-    
+
     ss.idx += 1
-    if ss.idx >= len(LEVELS):
+    if ss.idx >= TOTAL_LEVELS:
         ss.finished = True
-    st.rerun()
+    st.experimental_rerun()
 
 st.markdown(f"**Puntaje:** {ss.score} puntos")
-st.markdown("---")
-st.caption("Coloca tus imágenes en /images/<palabra>/1.jpg..4.jpg (todo en minúsculas, sin tildes).")
+st.divider()
+st.caption("Coloca tus imágenes en `/images/<palabra>/1.jpg..4.jpg` (minúsculas, sin tildes). Ej: `images/montana/1.jpg`")
+
 
 
 
