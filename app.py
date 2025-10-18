@@ -2,8 +2,9 @@
 import streamlit as st
 import unicodedata
 import random
-from dataclasses import dataclass
 import os, glob, re
+import matplotlib.pyplot as plt
+from dataclasses import dataclass
 
 # =========================
 #   CONFIGURACIÓN VISUAL
@@ -16,15 +17,21 @@ st.markdown("""
 html, body, [data-testid="stAppViewContainer"]{
   background: radial-gradient(1200px 600px at 10% -20%, #e8f7ee 0%, #f6fff5 35%, #ecfff7 60%, #f9fff7 100%);
 }
-[data-testid="stHeader"] {background-color: rgba(255,255,255,0.0);}
+[data-testid="stHeader"] {background-color: rgba(255,255,255,0);}
 .block-container{padding-top:1.5rem; max-width: 980px;}
-h1, h2, h3 { color: var(--jungle) !important; }
-.j-card{ background: rgba(255,255,255,0.92); border: 1px solid rgba(13,92,73,.08);
-  border-radius: 18px; padding: 14px 18px; box-shadow: 0 10px 28px rgba(13,92,73,.10); }
-.j-pill{ background: linear-gradient(90deg, var(--leaf), var(--jungle)); color: white;
-  padding: 8px 14px; border-radius: 999px; font-weight:600; display:inline-block; letter-spacing:.2px; }
-hr{border-top: 1px dashed rgba(13,92,73,.22);}
-.small{opacity:.85; font-size:.9rem;}
+h1, h2, h3 { color: var(--jungle) !important; text-align:center; }
+.option-btn{
+  display:inline-block; background:#f2f2f2; color:#0d5c49;
+  border:2px solid #0d5c49; border-radius:12px; padding:10px 15px;
+  font-weight:600; text-align:center; margin:6px; width:40%;
+}
+.option-btn:hover{ background:#dff4ec; border-color:#1f8a70; }
+.result-box{
+  padding:25px; border-radius:16px; text-align:center;
+  font-size:28px; font-weight:700; color:white; margin-top:15px;
+}
+.correct{ background:#1f8a70; }
+.incorrect{ background:#c0392b; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -35,23 +42,19 @@ def strip_diacritics(s: str) -> str:
     nf = unicodedata.normalize("NFD", s)
     return "".join(ch for ch in nf if unicodedata.category(ch) != "Mn")
 
-def normalize(s: str, ignore_accents=True) -> str:
-    s = s.strip().casefold()
-    return strip_diacritics(s) if ignore_accents else s
+def normalize(s: str) -> str:
+    return strip_diacritics(s.strip().casefold())
 
 def slugify_es(word_es: str) -> str:
     """Convierte 'Árbol' -> 'arbol' (solo minúsculas y sin tildes)."""
     s = strip_diacritics(word_es).lower()
-    s = re.sub(r"[^a-z0-9]+", "", s)  # quita espacios y símbolos
+    s = re.sub(r"[^a-z0-9]+", "", s)
     return s
 
 def local_image_paths_for(word_es: str):
     """Busca imágenes en /images/<palabra>/1.jpg..4.jpg"""
     slug = slugify_es(word_es)
     folder = os.path.join("images", slug)
-    if not os.path.isdir(folder):
-        return []
-    
     paths = []
     for i in [1, 2, 3, 4]:
         for ext in ("jpg", "jpeg", "png", "webp"):
@@ -59,8 +62,7 @@ def local_image_paths_for(word_es: str):
             if os.path.exists(p):
                 paths.append(p)
                 break
-
-    return paths if paths else []
+    return paths
 
 # =========================
 #   DATOS DEL JUEGO
@@ -73,117 +75,119 @@ class Level:
 
 RAW = [
     ("Agua","Nantak"), ("Sol","Etsa"), ("Luna","Nantu"), ("Estrella","Wáim"),
-    ("Fuego","Néemi"), ("Tierra","Iwanch"), ("Cielo","Náem"), ("Árbol","Númi"),
-    ("Flor","Páyam"), ("Hoja","Tákem"), ("Frío","Tsetsék"), ("Calor","Sékem"),
-    ("Viento","Pákem"), ("Lluvia","Tsúgki"), ("Río","Nantakjai"), ("Montaña","Wákan"),
+    ("Fuego","Néemi"), ("Tierra","Iwanch"), ("Cielo","Náem"), ("Arbol","Númi"),
+    ("Flor","Páyam"), ("Hoja","Tákem"), ("Frio","Tsetsék"), ("Calor","Sékem"),
+    ("Viento","Pákem"), ("Lluvia","Tsúgki"), ("Rio","Nantakjai"), ("Montana","Wákan"),
     ("Casa","Jíi"), ("Cocina","Wájam"), ("Perro","Pétsi"), ("Gato","Mítsa"),
-    ("Pájaro","Wíim"), ("Mono","Túukam"), ("Pez","Námpet"), ("Serpiente","Wámpis"),
-    ("Hormiga","Túutam"), ("Mariposa","Páach"), ("Niña","Túunam"), ("Comida","Núun"),
-    ("Yuca","Kúcha"), ("Plátano","Pítsa"),
+    ("Pajaro","Wíim"), ("Mono","Túukam"), ("Pez","Námpet"), ("Serpiente","Wámpis"),
+    ("Hormiga","Túutam"), ("Mariposa","Páach"), ("Nina","Túunam"), ("Comida","Núun"),
+    ("Yuca","Kúcha"), ("Platano","Pítsa"),
 ]
 LEVELS = [Level(es=es, aw=aw) for es, aw in RAW]
 
 # =========================
-#   ESTADO
+#   ESTADO DEL JUEGO
 # =========================
 ss = st.session_state
-if "order" not in ss:
-    ss.order = list(range(len(LEVELS)))
-    random.shuffle(ss.order)
-if "idx" not in ss:
-    ss.idx = 0
-if "score" not in ss:
-    ss.score = 0
-if "options_by_level" not in ss:
-    ss.options_by_level = {}
+if "idx" not in ss: ss.idx = 0
+if "score" not in ss: ss.score = 0
+if "corrects" not in ss: ss.corrects = 0
+if "incorrects" not in ss: ss.incorrects = 0
+if "finished" not in ss: ss.finished = False
+if "options_by_level" not in ss: ss.options_by_level = {}
 
 # =========================
-#   INTERFAZ PRINCIPAL
+#   JUEGO FINALIZADO
 # =========================
-st.markdown('<div class="j-pill">Awajún · 4 fotos 1 palabra</div>', unsafe_allow_html=True)
-st.title("🌿 Aprende Awajún jugando")
+if ss.finished:
+    st.header("🏁 ¡Juego finalizado!")
+    st.subheader(f"Respondiste correctamente {ss.corrects} de {len(LEVELS)} preguntas")
 
-colL, colR = st.columns([2,1])
-with colL:
-    st.markdown('<div class="j-card">', unsafe_allow_html=True)
-    st.write("**Puntaje:**", ss.score)
-    st.write("**Nivel:**", ss.idx + 1, "/", len(LEVELS))
-    st.markdown('</div>', unsafe_allow_html=True)
-with colR:
-    opt = st.selectbox("Comparación", ["Flexible (ignora acentos)", "Estricta"], index=0)
-    ignore_accents = (opt == "Flexible (ignora acentos)")
+    # Mensaje final según puntaje
+    ratio = ss.corrects / len(LEVELS)
+    if ratio == 1:
+        st.success("🌟 ¡Felicidades! Eres un verdadero maestro del Awajún. ¡Perfecto!")
+    elif ratio >= 0.8:
+        st.success("💪 ¡Excelente! Conoces muy bien las palabras Awajún.")
+    elif ratio >= 0.5:
+        st.warning("🙂 Buen intento, sigue practicando para mejorar.")
+    else:
+        st.error("🌱 No te preocupes, sigue aprendiendo. ¡La práctica hace al maestro!")
 
-st.markdown("---")
+    # Gráfica de resultados
+    fig, ax = plt.subplots()
+    ax.bar(["Correctas", "Incorrectas"], [ss.corrects, ss.incorrects], color=["#1f8a70", "#c0392b"])
+    ax.set_title("Resultados del Juego", fontsize=16)
+    st.pyplot(fig)
+
+    st.markdown("---")
+    if st.button("🔄 Jugar de nuevo"):
+        ss.idx = 0
+        ss.score = 0
+        ss.corrects = 0
+        ss.incorrects = 0
+        ss.finished = False
+        ss.options_by_level = {}
+        st.rerun()
+    st.stop()
 
 # =========================
 #   NIVEL ACTUAL
 # =========================
-k = ss.order[ss.idx]
-lvl = LEVELS[k]
+lvl = LEVELS[ss.idx]
 paths = lvl.images()
 
-c1, c2 = st.columns(2)
-def show(col, path):
-    if path and os.path.exists(path):
-        col.image(path, use_container_width=True)
-    else:
-        col.warning(f"🖼️ Falta imagen en `images/{slugify_es(lvl.es)}/1.jpg..4.jpg`")
+st.title(f"Nivel {ss.idx+1} / {len(LEVELS)}")
+st.subheader(f"¿Cuál es la palabra en Awajún?")
 
-if paths:
-    show(c1, paths[0]); show(c2, paths[1] if len(paths)>1 else None)
-    show(c1, paths[2] if len(paths)>2 else None); show(c2, paths[3] if len(paths)>3 else None)
+col1, col2 = st.columns(2)
+if len(paths) >= 4:
+    col1.image(paths[0]); col2.image(paths[1])
+    col1.image(paths[2]); col2.image(paths[3])
 else:
-    st.error(f"No encontré imágenes en `images/{slugify_es(lvl.es)}/`. Sube 1–4 archivos .jpg numerados 1..4.")
+    st.warning(f"Faltan imágenes en: images/{slugify_es(lvl.es)}/")
 
 # =========================
-#   OPCIONES ESTABLES
+#   OPCIONES (BOTONES)
 # =========================
-if k not in ss.options_by_level:
+if ss.idx not in ss.options_by_level:
     correct = lvl.aw
     pool = [aw for _, aw in RAW if aw != correct]
     wrong = random.sample(pool, 3)
     opts = [correct] + wrong
     random.shuffle(opts)
-    ss.options_by_level[k] = opts
-options = ss.options_by_level[k]
+    ss.options_by_level[ss.idx] = opts
 
-st.markdown("### ✍️ Elige la palabra correcta (Awajún):")
-choice_key = f"choice_level_{k}"
-choice_value = st.radio(
-    "alternativas",
-    options=options,
-    index=None,
-    label_visibility="collapsed",
-    key=choice_key,
-)
+options = ss.options_by_level[ss.idx]
+cols = st.columns(2)
+selected = None
 
-b1, b2, b3, b4 = st.columns(4)
-check = b1.button("Comprobar ✅", use_container_width=True)
-hint  = b2.button("Pista 💡", use_container_width=True)
-skip  = b3.button("Saltar ⏭️", use_container_width=True)
-nextB = b4.button("Siguiente ▶️", use_container_width=True)
+for i, opt in enumerate(options):
+    if cols[i % 2].button(opt, use_container_width=True):
+        selected = opt
 
-if hint:
-    st.info(f"💡 **Pista**: Español → **{lvl.es}**")
-
-if check:
-    if choice_value is None:
-        st.warning("Selecciona una alternativa antes de comprobar.")
+# =========================
+#   VALIDACIÓN DE RESPUESTA
+# =========================
+if selected:
+    if normalize(selected) == normalize(lvl.aw):
+        ss.score += 5
+        ss.corrects += 1
+        st.markdown('<div class="result-box correct">✅ ¡CORRECTO!</div>', unsafe_allow_html=True)
     else:
-        if normalize(choice_value, ignore_accents) == normalize(lvl.aw, ignore_accents):
-            st.success("✅ ¡Correcto!")
-            ss.score += 10
-            ss.idx = (ss.idx + 1) % len(LEVELS)
-            st.rerun()
-        else:
-            st.error("❌ Incorrecto, ¡inténtalo otra vez!")
-
-if skip or nextB:
-    ss.idx = (ss.idx + 1) % len(LEVELS)
+        ss.incorrects += 1
+        st.markdown('<div class="result-box incorrect">❌ INCORRECTO</div>', unsafe_allow_html=True)
+    
+    ss.idx += 1
+    if ss.idx >= len(LEVELS):
+        ss.finished = True
     st.rerun()
 
+st.markdown(f"**Puntaje:** {ss.score} puntos")
 st.markdown("---")
-st.caption("Las carpetas deben estar en minúsculas, sin tildes y con imágenes 1.jpg..4.jpg. Ejemplo: images/montana/1.jpg")
+st.caption("Coloca tus imágenes en /images/<palabra>/1.jpg..4.jpg (todo en minúsculas, sin tildes).")
+
+
 
 
 
