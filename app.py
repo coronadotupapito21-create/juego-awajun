@@ -3,6 +3,8 @@ import streamlit as st
 import unicodedata
 import random
 import os, re
+import time
+import pandas as pd
 
 # =========================
 #   CONFIGURACIÓN VISUAL
@@ -52,13 +54,13 @@ def normalize(s: str) -> str:
     return strip_diacritics(s.strip().casefold())
 
 def slugify_es(word_es: str) -> str:
-    """Convierte 'Árbol grande' -> 'arbolgrande' (solo minúsculas y sin tildes) para el nombre de carpeta."""
+    """Convierte 'Árbol grande' -> 'arbolgrande' (minúsculas, sin tildes)."""
     s = strip_diacritics(word_es).lower()
     s = re.sub(r"[^a-z0-9]+", "", s)
     return s
 
 def local_image_paths_for(word_es: str):
-    """Busca imágenes en /images/<palabra>/1.jpg..4.jpg (jpg/jpeg/png/webp)."""
+    """Busca imágenes en /images/<palabra>/1.jpg..4.jpg"""
     slug = slugify_es(word_es)
     folder = os.path.join("images", slug)
     paths = []
@@ -71,7 +73,7 @@ def local_image_paths_for(word_es: str):
     return paths
 
 # =========================
-#   DATOS DEL JUEGO (30 niveles)
+#   DATOS DEL JUEGO
 # =========================
 RAW = [
     ("Agua","Nantak"), ("Sol","Etsa"), ("Luna","Nantu"), ("Estrella","Wáim"),
@@ -83,9 +85,11 @@ RAW = [
     ("Hormiga","Túutam"), ("Mariposa","Páach"), ("Nina","Túunam"), ("Comida","Núun"),
     ("Yuca","Kúcha"), ("Platano","Pítsa"),
 ]
+TOTAL_LEVELS = len(RAW)
+POINTS_PER_HIT = 5
 
 # =========================
-#   ESTADO DEL JUEGO
+#   ESTADO
 # =========================
 ss = st.session_state
 if "idx" not in ss: ss.idx = 0
@@ -94,9 +98,8 @@ if "corrects" not in ss: ss.corrects = 0
 if "incorrects" not in ss: ss.incorrects = 0
 if "finished" not in ss: ss.finished = False
 if "options_by_level" not in ss: ss.options_by_level = {}
-
-TOTAL_LEVELS = len(RAW)  # 30
-POINTS_PER_HIT = 5
+if "last_feedback" not in ss: ss.last_feedback = None
+if "last_color" not in ss: ss.last_color = None
 
 # =========================
 #   PANTALLA FINAL
@@ -117,26 +120,17 @@ def show_final_screen():
         st.error("🌱 ¡Ánimo! Cada intento suma. Vuelve a jugar y mejorarás.")
 
     st.markdown("#### 📊 Tus resultados")
-    # Gráfica nativa (sin matplotlib)
-    import pandas as pd
-    df = pd.DataFrame(
-        {"Cantidad": [ss.corrects, ss.incorrects]},
-        index=["Correctas", "Incorrectas"]
-    )
+    df = pd.DataFrame({"Cantidad": [ss.corrects, ss.incorrects]}, index=["Correctas", "Incorrectas"])
     st.bar_chart(df)
 
     st.divider()
     if st.button("🔄 Jugar de nuevo", use_container_width=True):
-        ss.idx = 0
-        ss.score = 0
-        ss.corrects = 0
-        ss.incorrects = 0
-        ss.finished = False
-        ss.options_by_level = {}
+        for key in list(ss.keys()):
+            del ss[key]
         st.rerun()
 
 # =========================
-#   JUEGO
+#   INICIO DE JUEGO
 # =========================
 st.markdown('<span class="j-chip">Awajún · 4 fotos 1 palabra</span>', unsafe_allow_html=True)
 st.title("🌿 Aprende Awajún jugando")
@@ -145,7 +139,6 @@ if ss.finished:
     show_final_screen()
     st.stop()
 
-# Nivel actual
 es, aw = RAW[ss.idx]
 paths = local_image_paths_for(es)
 
@@ -159,42 +152,50 @@ if len(paths) >= 4:
 else:
     st.warning(f"Faltan imágenes en: `images/{slugify_es(es)}/1.jpg..4.jpg`")
 
-# Opciones estables por nivel
+# =========================
+#   OPCIONES
+# =========================
 if ss.idx not in ss.options_by_level:
     correct = aw
     pool = [opp_aw for _, opp_aw in RAW if opp_aw != correct]
     wrong = random.sample(pool, 3)
-    options = [correct] + wrong
-    random.shuffle(options)
-    ss.options_by_level[ss.idx] = options
+    opts = [correct] + wrong
+    random.shuffle(opts)
+    ss.options_by_level[ss.idx] = opts
 else:
-    options = ss.options_by_level[ss.idx]
+    opts = ss.options_by_level[ss.idx]
 
-# Botones tipo “cuadritos”
 cols = st.columns(2)
-selected = None
-for i, opt in enumerate(options):
-    if cols[i % 2].button(f"{opt}", use_container_width=True, key=f"opt_{ss.idx}_{i}"):
-        selected = opt
+for i, opt in enumerate(opts):
+    if cols[i % 2].button(opt, use_container_width=True, key=f"opt_{ss.idx}_{i}"):
+        if normalize(opt) == normalize(aw):
+            ss.score += POINTS_PER_HIT
+            ss.corrects += 1
+            ss.last_feedback = "✅ ¡CORRECTO!"
+            ss.last_color = "correct"
+        else:
+            ss.incorrects += 1
+            ss.last_feedback = "❌ INCORRECTO"
+            ss.last_color = "incorrect"
+        ss.idx += 1
+        if ss.idx >= TOTAL_LEVELS:
+            ss.finished = True
+        else:
+            time.sleep(0.5)
+        st.rerun()
 
-# Validación y avance
-if selected:
-    if normalize(selected) == normalize(aw):
-        ss.score += POINTS_PER_HIT
-        ss.corrects += 1
-        st.markdown('<div class="result-box correct">✅ ¡CORRECTO!</div>', unsafe_allow_html=True)
-    else:
-        ss.incorrects += 1
-        st.markdown('<div class="result-box incorrect">❌ INCORRECTO</div>', unsafe_allow_html=True)
-
-    ss.idx += 1
-    if ss.idx >= TOTAL_LEVELS:
-        ss.finished = True
-    st.experimental_rerun()
+# =========================
+#   FEEDBACK
+# =========================
+if ss.last_feedback:
+    color_class = ss.last_color
+    st.markdown(f'<div class="result-box {color_class}">{ss.last_feedback}</div>', unsafe_allow_html=True)
 
 st.markdown(f"**Puntaje:** {ss.score} puntos")
 st.divider()
 st.caption("Coloca tus imágenes en `/images/<palabra>/1.jpg..4.jpg` (minúsculas, sin tildes). Ej: `images/montana/1.jpg`")
+
+
 
 
 
